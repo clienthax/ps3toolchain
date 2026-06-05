@@ -5,21 +5,15 @@ BINUTILS="binutils-2.22"
 
 if [ ! -d ${BINUTILS} ]; then
 
-  ## Download the source code.
-  if [ ! -f ${BINUTILS}.tar.bz2 ]; then wget --continue https://ftpmirror.gnu.org/binutils/${BINUTILS}.tar.bz2; fi
-
-  ## Download an up-to-date config.guess and config.sub
-  if [ ! -f config.guess ]; then wget --continue https://git.savannah.gnu.org/cgit/config.git/plain/config.guess; fi
-  if [ ! -f config.sub ]; then wget --continue https://git.savannah.gnu.org/cgit/config.git/plain/config.sub; fi
-
   ## Unpack the source code.
-  tar xfvj ${BINUTILS}.tar.bz2
+  echo "Unpacking ${BINUTILS}"
+  pv -pterab ../downloads/${BINUTILS}.tar.bz2 | tar xjf -
 
   ## Patch the source code.
   cat ../patches/${BINUTILS}-PS3.patch | patch -p1 -d ${BINUTILS}
 
   ## Replace config.guess and config.sub
-  cp config.guess config.sub ${BINUTILS}
+  cp "$(automake --print-libdir)"/config.guess "$(automake --print-libdir)"/config.sub ${BINUTILS}
 
 fi
 
@@ -48,4 +42,5 @@ cd ${BINUTILS}/build-ppu
 ## Compile and install.
 PROCS="$(nproc --all 2>&1)" || ret=$?
 if [ ! -z $ret ]; then PROCS=4; fi
-${MAKE:-make} -j $PROCS && ${MAKE:-make} libdir=host-libs/lib install
+${MAKE:-make} -j $PROCS
+${MAKE:-make} libdir=host-libs/lib MULTIOSDIR=. install

@@ -8,39 +8,129 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        include:
+          - runner: [self-hosted, linux, x64]
+            os: linux
+
+          - runner: [self-hosted, macos, x64]
+            os: macos
+
+          - runner: macos-26
+            os: macos
 
     steps:
-    - uses: actions/checkout@v6
-    
-    - name: Install Ubuntu requirements
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install autoconf automake bison flex gcc libelf-dev make texinfo libncurses5-dev patch python3 python-is-python3 subversion wget zlib1g-dev libtool-bin python3-dev bzip2 libgmp3-dev pkg-config
+      - uses: actions/checkout@v6
 
-    - name: Runs all the stages in the shell
-      run: |
-        mkdir $PWD/ps3dev
-        export PS3DEV=$PWD/ps3dev
-        export PSL1GHT=$PS3DEV
-        export PATH=$PATH:$PS3DEV/bin
-        export PATH=$PATH:$PS3DEV/ppu/bin
-        export PATH=$PATH:$PS3DEV/spu/bin
-        ./toolchain.sh
+      - name: Install Linux requirements
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install \
+            autoconf automake bison flex gcc libelf-dev make texinfo \
+            libncurses5-dev patch python3 python-is-python3 subversion \
+            wget zlib1g-dev libtool-bin python3-dev bzip2 libgmp3-dev \
+            pkg-config pv libssl-dev
 
-    - name: Get short SHA
-      id: slug
-      run: echo "::set-output name=sha8::$(echo ${GITHUB_SHA} | cut -c1-8)"
-    
-    - name: Compress ps3dev folder
-      run: |
-        tar -zcvf ps3dev.tar.gz ps3dev
+      # ------------------------
+      # macOS dependencies
+      # ------------------------
+      - name: Install macOS requirements
+        if: matrix.os == 'macos'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          HOMEBREW_NO_ENV_HINTS: 1
+        run: |
+          if ! command -v brew >/dev/null 2>&1; then
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
 
-    - uses: actions/upload-artifact@v6
-      with:
-        name: ps3dev-${{ steps.slug.outputs.sha8 }}-${{matrix.os}}
-        path: ps3dev.tar.gz
+          if [[ -d /opt/homebrew ]]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+          else
+            eval "$(/usr/local/bin/brew shellenv)"
+          fi
+
+          brew install \
+            autoconf automake openssl libelf ncurses zlib gmp wget \
+            pkg-config texinfo pv
+
+      # ------------------------
+      # GLOBAL ENV SETUP
+      # ------------------------
+      - name: Setup environment (PS3DEV + base PATH)
+        shell: bash
+        run: |
+          mkdir -p "$PWD/ps3dev"
+          mkdir -p "$PWD/build"
+
+          echo "PS3DEV=$PWD/ps3dev" >> $GITHUB_ENV
+          echo "PSL1GHT=$PWD/ps3dev" >> $GITHUB_ENV
+          echo "PATH=$PATH:$PWD/ps3dev/bin:$PWD/ps3dev/ppu/bin:$PWD/ps3dev/spu/bin" >> $GITHUB_ENV
+
+      # ------------------------
+      # Build steps
+      # ------------------------
+      - name: Download files
+        working-directory: ./build
+        run: ../scripts/000-download-files.sh
+
+      - name: Build Binutils (PPU)
+        working-directory: ./build
+        run: ../scripts/001-binutils-PPU.sh
+
+      - name: Build Gcc + Newlib (PPU)
+        working-directory: ./build
+        run: ../scripts/002-gcc-newlib-PPU.sh
+
+      - name: Symlinks (PPU)
+        working-directory: ./build
+        run: ../scripts/004-symlinks-PPU.sh
+
+      - name: Build Binutils (SPU)
+        working-directory: ./build
+        run: ../scripts/005-binutils-SPU.sh
+
+      - name: Build Gcc + Newlib (SPU)
+        working-directory: ./build
+        run: ../scripts/006-gcc-newlib-SPU.sh
+
+      - name: Get short SHA
+        id: slug
+        run: echo "sha8=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Compress ps3dev folder
+        run: tar -zcvf ps3dev-${{ matrix.os }}-${{ runner.arch }}.gz ps3dev
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ps3dev-${{ steps.slug.outputs.sha8 }}-${{ matrix.os }}-${{ runner.arch }}
+          path: ps3dev-${{ matrix.os }}-${{ runner.arch }}.tar.gz
+
+  push_release:
+    if: |
+      github.event_name == 'push' &&
+      github.repository == 'clienthax/ps3toolchain'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create 1.0${{ GITHUB.RUN_NUMBER }} artifacts/*.tar.gz --target ${{ GITHUB.SHA }} -t 1.0${{ GITHUB.RUN_NUMBER }}
