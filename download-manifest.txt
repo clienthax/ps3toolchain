@@ -2,4 +2,4 @@ https://ftpmirror.gnu.org/binutils/binutils-2.22.tar.bz2 binutils-2.22.tar.bz2 6
 https://ftpmirror.gnu.org/gnu/gcc/gcc-7.2.0/gcc-7.2.0.tar.xz gcc-7.2.0.tar.xz 1cf7adf8ff4b5aa49041c8734bbcf1ad18cc4c94d0029aae0f4e48841088479a
 https://sourceware.org/pub/newlib/newlib-1.20.0.tar.gz newlib-1.20.0.tar.gz c644b2847244278c57bec2ddda69d8fab5a7c767f3b9af69aa7aa3da823ff692
 https://github.com/ps3dev/PSL1GHT/tarball/master psl1ght-master.tar.gz
-https://github.com/ps3dev/ps3libraries/tarball/master ps3libraries-master.tar.gz
+https://github.com/ps3dev/clienthax/tarball/build-updates ps3libraries-master.tar.gz
