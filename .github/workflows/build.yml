@@ -15,6 +15,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
+
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2.23
+      with:
+        key: ${{ matrix.os }}
     
     - name: Install Ubuntu requirements
       if: matrix.os == 'ubuntu-latest'
@@ -24,6 +29,7 @@ jobs:
 
     - name: Runs all the stages in the shell
       run: |
+        export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
         mkdir $PWD/ps3dev
         export PS3DEV=$PWD/ps3dev
         export PSL1GHT=$PS3DEV
